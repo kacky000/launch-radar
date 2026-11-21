@@ -381,6 +381,16 @@
     }).sort(function (a, b) { return b.implied_value_usd - a.implied_value_usd || (a.slug < b.slug ? -1 : 1); });
     rows.forEach(function (r, i) { r.rank = i + 1; });
 
+    // How firm is a rank? Refit the curve 200 times on resampled tokens (a fixed seed, so both runs
+    // agree) and keep each row's 5th to 95th percentile rank.
+    var seed = 20261114, seen = rows.map(function () { return []; });
+    for (var k = 0; k < 200; k++) {
+      var refit = fitValue(comps.map(function () { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return comps[(seed >>> 8) % comps.length]; }), choice.terms);
+      var v = rows.map(function (r) { return valueAt(refit, r) + Math.log10(r.odds); });
+      v.forEach(function (x, i) { seen[i].push(1 + v.filter(function (y) { return y > x; }).length); });
+    }
+    rows.forEach(function (r, i) { r.rank_lo = Math.round(quant(seen[i], 0.05)); r.rank_hi = Math.round(quant(seen[i], 0.95)); });
+
     return {
       as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd, total: P.length, watchlist: snap.watchlist.length,
       counts: counts, items: items, comps: comps, fit: fit, steps: choice.steps, band: band,
@@ -396,7 +406,7 @@
       var farm = farmOf(r, q);
       return {
         rank: r.rank, slug: r.slug, name: r.name, implied_value_usd: r.implied_value_usd, farm_steps: farm.steps.map(stepText),
-        token_status: 'no token on record', tier: r.tier, category: r.category, sector: r.sector, chains: r.chains,
+        token_status: 'no token on record', rank_range: [r.rank_lo, r.rank_hi], tier: r.tier, category: r.category, sector: r.sector, chains: r.chains,
         tvl_usd: r.tvl_usd, change_7d: r.change_7d, listed_at: r.listed_at, no_token_days: r.age_days,
         launch_value_usd: r.launch_usd, launch_odds: Math.round(r.odds * 1e4) / 1e4, low_usd: r.low_usd, high_usd: r.high_usd,
         farm: { play: farm.play, chain: farm.chain, deposit_usd: farm.deposit, weeks: farm.weeks, fees_usd: Math.round(farm.fees * 100) / 100, hours: Math.round(farm.hours * 10) / 10, expected_drop_usd: Math.round(farm.drop * 100) / 100, net_usd: Math.round(farm.net * 100) / 100, verdict: farm.verdict }
@@ -405,8 +415,8 @@
   }
 
   var api = {
-    PARAMS: PARAMS, GROUPS: GROUPS, SECTORS: SECTORS, RANKED: RANKED, PLAYS: PLAYS, build: build, boardRows: boardRows, farmOf: farmOf,
-    sealOf: sealOf, sectorName: sectorName, gasOf: gasOf, usd: usd, usd2: usd2, ageText: ageText, stepText: stepText, valueAt: valueAt, median: median
+    PARAMS: PARAMS, GROUPS: GROUPS, RANKED: RANKED, build: build, boardRows: boardRows, farmOf: farmOf,
+    sectorName: sectorName, usd: usd, usd2: usd2, valueAt: valueAt
   };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.RadarModel = api;

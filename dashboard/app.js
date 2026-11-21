@@ -62,7 +62,7 @@
 
   var TABLES = {
     pre: { sort: 'rank', dir: 1, cols: [
-      ['rank', '#', function (r) { return r.rank; }, function (r) { return r.rank; }, 'text'],
+      ['rank', '# · range', function (r) { return r.rank; }, function (r) { return '<b>' + r.rank + '</b><small>' + r.rank_lo + '–' + r.rank_hi + '</small>'; }, 'text'],
       ['name', 'Protocol', function (r) { return r.name.toLowerCase(); }, nameCell, 'text'],
       ['tvl', 'TVL', function (r) { return r.tvl_usd; }, function (r) { return usd(r.tvl_usd); }],
       ['d7', '7d TVL', function (r) { return r.change_7d == null ? -1e9 : r.change_7d; }, function (r) { return '<span class="' + (r.change_7d < 0 ? 'neg' : 'pos') + '">' + pct(r.change_7d) + '</span>'; }],
@@ -70,10 +70,10 @@
       ['odds', 'Launch odds', function (r) { return r.odds; }, function (r) { return '<span class="meter"><i style="width:' + share(r.odds) + '"></i></span>' + share(r.odds); }],
       ['launch', 'If it launches', function (r) { return r.launch_usd; }, function (r) { return usd(r.launch_usd); }],
       ['implied', 'Implied value · P25 to P75', function (r) { return r.implied_value_usd; }, rangeCell],
-      ['drop', 'Expected drop', function (r) { return F[r.slug].drop; }, function (r) { return usd2(F[r.slug].drop); }],
       ['net', 'Net of fees', function (r) { return F[r.slug].net; }, function (r) { return verdictPill(F[r.slug].verdict) + ' ' + signed(F[r.slug].net); }],
       ['hour', 'Net / hour', function (r) { return F[r.slug].perHour; }, function (r) { return usd2(F[r.slug].perHour); }],
-      ['plan', 'Farm plan', function (r) { return F[r.slug].play; }, function (r) { var f = F[r.slug]; return esc(f.play + ' · ' + f.chain) + '<small>' + usd2(f.fees) + ' fees · ' + f.hours.toFixed(1) + ' h · ' + f.weeks + ' wk</small>'; }, 'text']
+      ['plan', 'Farm plan', function (r) { return F[r.slug].play; }, function (r) { var f = F[r.slug]; return esc(f.play + ' · ' + f.chain) + '<small>' + usd2(f.fees) + ' fees · ' + f.hours.toFixed(1) + ' h · ' + f.weeks + ' wk · ' + (f.even ? 'pays from ' + usd(f.even) : 'never pays') + '</small>'; }, 'text']
+      // "pays from": the deposit at which the expected drop first covers the plan's fees
     ] },
     comps: { sort: 'cap', dir: -1, cols: [
       ['name', 'Traded token', function (c) { return c.name.toLowerCase(); }, function (c) { return '<b>' + esc(c.name) + '</b><span class="tag">' + esc(c.symbol || c.id) + '</span><small>' + esc(c.category || '') + ' · ' + c.members + (c.members > 1 ? ' protocols summed' : ' protocol') + '</small>'; }, 'text'],
@@ -151,7 +151,8 @@
     if (t.growth) s += ' × 10^(' + b[i++].toFixed(2) + ' × 7d growth)';
     if (t.age) s += ' × 10^(' + b[i++].toFixed(2) + ' × years)';
     if (t.sector) s += ' × sector';
-    return s;
+    var w = model.odds.w.map(function (x) { return (x < 0 ? '− ' : '+ ') + Math.abs(x).toFixed(2); });
+    return s + '<br><b>launch odds</b> = sigmoid(' + w[0].replace(' ', '') + ' ' + w[1] + ' × log10(TVL / $100M) ' + w[2] + ' × years with no token ' + w[3] + ' × 7-day TVL growth), each weight fitted on ' + model.odds.peers + ' like protocols';
   }
 
   function evidence() {
@@ -159,12 +160,12 @@
       return '<tr class="' + (s.kept ? 'kept' : 'cut') + '"><td>' + s.label + '</td><td class="n">' + times(s.loo) + '</td><td class="n">' + times(s.wf) + '</td><td>' + (s.kept ? (s.key === 'flat' ? 'baseline' : '✓ kept') : 'not kept') + '</td></tr>';
     }).join('');
     var o = model.odds, terms = o.terms.slice(1).map(function (t) {
-      return '<tr class="' + (t.without > o.brier ? 'kept' : 'cut') + '"><td>without ' + t.label + '</td><td class="n">' + t.without.toFixed(3) + '</td><td>' + (t.without > o.brier ? '✓ helps' : 'no help') + ', weight ' + t.w.toFixed(2) + '</td></tr>';
+      return '<tr class="' + (t.without > o.brier ? 'kept' : 'cut') + '"><td>less ' + t.label + '</td><td class="n">' + t.without.toFixed(3) + '</td><td>' + (t.without > o.brier ? '✓ ' : 'no help ') + t.w.toFixed(2) + '</td></tr>';
     }).join('');
     return '<section class="card proof"><h2>Does it hold on tokens it never saw? <code>chooseTerms()</code> <code>brierOf()</code></h2>' +
       '<p class="eq"><b>implied value</b> = launch value × launch odds &nbsp;·&nbsp; <b>launch value</b> = ' + formula() + '</p><div class="two">' +
       '<table><thead><tr><th>Value on ' + model.comps.length + ' traded tokens</th><th class="n">left one out</th><th class="n">older → newer</th><th></th></tr></thead><tbody>' + steps + '</tbody></table>' +
-      '<table><thead><tr><th>Odds, five-fold Brier</th><th class="n">score</th><th></th></tr></thead><tbody>' +
+      '<table><thead><tr><th>Odds, 5-fold Brier</th><th class="n">score</th><th>weight</th></tr></thead><tbody>' +
       '<tr><td>base rate alone</td><td class="n">' + o.base.toFixed(3) + '</td><td>baseline</td></tr><tr class="kept"><td>TVL + years + growth</td><td class="n">' + o.brier.toFixed(3) + '</td><td>✓ used</td></tr>' + terms + '</tbody></table></div>' +
       '<p class="note">A term stays only if both blind tests improve. Misses are typical multiples: ×2 means half the tokens were priced within half or double their real cap. Odds are the share of like protocols that record a token, not a forecast that one will launch.</p></section>';
   }
@@ -224,7 +225,7 @@
     out.push(['· ' + usd(r.tvl_usd) + ' of TVL, weight ' + w[1].toFixed(2) + ' per tenfold', add(w[1] * (r.lt - 8))]);
     out.push(['· 7-day TVL growth of ' + pct(r.change_7d) + ', weight ' + w[3].toFixed(2), add(w[3] * r.g * 8)]);
     out.push(['Launch odds = sigmoid(' + w[0].toFixed(2) + ' + the three lines above)', '× ' + share(r.odds)]);
-    out.push(['= implied value, rank ' + r.rank + ' of ' + model.rows.length, usd(r.implied_value_usd)]);
+    out.push(['= implied value, rank ' + r.rank + ' of ' + model.rows.length + ' (' + r.rank_lo + ' to ' + r.rank_hi + ' over 200 refits)', usd(r.implied_value_usd)]);
     return out.map(function (x) { return '<tr class="' + (x[0].charAt(0) === '=' ? 'sum' : '') + '"><td>' + esc(x[0]) + '</td><td class="n">' + x[1] + '</td></tr>'; }).join('');
   }
 
@@ -248,7 +249,7 @@
       '<h2>What the market pays at this size</h2><table><thead><tr><th>Nearest traded tokens by TVL</th><th class="n">TVL</th><th class="n">Real cap</th><th class="n">Cap / TVL</th></tr></thead><tbody>' +
       near.map(function (c) { return '<tr><td>' + esc(c.name) + ' <small class="in">' + esc(c.symbol || '') + '</small></td><td class="n">' + usd(c.tvl) + '</td><td class="n">' + usd(c.cap) + '</td><td class="n">' + (c.cap / c.tvl).toFixed(3) + '</td></tr>'; }).join('') + '</tbody></table>' +
       '<h2>Does the size of the deposit change the answer? <code>farmOf()</code></h2><table><thead><tr><th>Deposit</th><th class="n">Drop</th><th class="n">Fees</th><th class="n">Net</th><th class="n">Per hour</th><th></th></tr></thead><tbody>' + sizes + '</tbody></table>' +
-      '<p class="note">Drop = implied value × ' + state.share + '% to users × your share of TVL. ' + (f.even ? 'Fees are covered from a deposit of about ' + usd(f.even) + '.' : 'No deposit covers the entry cost at this drop.') + ' FARM means the net beats $' + M.PARAMS.wage + ' an hour.</p></section>' +
+      '<p class="note">Drop = implied value × ' + state.share + '% to users × your share of TVL. ' + (f.even ? 'Fees are covered from a deposit of about ' + usd(f.even) + '.' : 'No deposit covers the entry cost at this drop.') + ' FARM means the net beats $' + M.PARAMS.wage + ' an hour. The position\'s own yield and the T-bill it gives up are taken to cancel: the snapshot records neither.</p></section>' +
       '<section><h2>Farm plan: ' + esc(f.play) + ' on ' + esc(f.chain) + '</h2><table class="plan"><thead><tr><th class="n">#</th><th>Step</th><th>Cost</th><th>Time</th></tr></thead><tbody>' + steps +
       '<tr class="sum"><td></td><td>All seven steps on ' + usd(f.deposit) + '</td><td>' + usd2(f.fees) + '</td><td>' + f.hours.toFixed(1) + ' h in ' + f.weeks + ' wk</td></tr></tbody></table>' +
       '<p class="note">Gas is a planning figure of ' + usd2(f.gas) + ' a transaction on ' + esc(f.chain) + ', the cheapest of its three largest chains. The snapshot records no token for ' + esc(r.name) + '; it does not say none exists or will.</p></section></div>';
