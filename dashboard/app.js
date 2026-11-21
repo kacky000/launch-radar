@@ -130,8 +130,8 @@
     return [
       ['Ranked, no token on record', model.rows.length, 'of ' + model.total + ' read · ' + model.counts.watch + '/' + model.watchlist + ' watchlist · ' + model.counts.early + ' below the ' + usd(model.floor_usd) + ' floor'],
       ['Implied value, whole board', usd(model.seal.total), 'rank 1 ' + esc(model.rows[0].name) + ' ' + usd(model.rows[0].implied_value_usd)],
-      ['Typical miss, priced blind', times(t.loo), 'a flat multiple misses ' + times(t.flatLoo) + ' · older pricing newer ' + times(t.wf) + ' against ' + times(t.flatWf)],
-      ['Is the range honest?', share(t.holdWf), 'of ' + t.dated + ' newer tokens land inside P25 to P75 · ' + share(t.holdLoo) + ' left-one-out · stated 50%'],
+      ['Typical miss, priced blind', times(t.loo) + ' · ' + times(t.wf), 'left one out · older pricing newer; one flat multiple misses ' + times(t.flatLoo) + ' · ' + times(t.flatWf)],
+      ['Is the range honest?', share(t.holdWf) + ' · ' + share(t.wideWf), 'of ' + t.dated + ' newer tokens inside P25–P75 · P10–P90, stated 50% · 80%; ' + share(t.holdLoo) + ' left one out'],
       ['Launch odds, Brier score', o.brier.toFixed(3), 'base rate alone ' + o.base.toFixed(3) + ' · ' + o.tokens + ' of ' + o.peers + ' like protocols record a token'],
       ['Worth farming with ' + usd(+state.ticket), n.FARM + ' farm', n.THIN + ' thin · ' + n.SKIP + ' skip · best ' + esc(best.name) + ' ' + usd2(F[best.slug].perHour) + '/h']
     ].map(function (k, i) { return '<div class="kpi k' + i + '"><h3>' + k[0] + '</h3><strong>' + k[1] + '</strong><p>' + k[2] + '</p></div>'; }).join('');
@@ -147,7 +147,7 @@
 
   /** The curve in words, from the fitted coefficients themselves. */
   function formula() {
-    var t = fit.t, b = fit.b, i = 1, s = t.size ? usd(Math.pow(10, b[0])) + ' × (TVL / $100M)^' + b[i++].toFixed(3) : times(Math.pow(10, b[0])) + ' × TVL';
+    var t = fit.t, b = fit.b, i = 1, s = t.size ? usd(Math.pow(10, b[0])) + ' × (TVL / $100M)^(' + b[i++].toFixed(2) + ' ± ' + model.tests.slopeSe.toFixed(2) + ' over 200 refits)' :times(Math.pow(10, b[0])) + ' × TVL';
     if (t.growth) s += ' × 10^(' + b[i++].toFixed(2) + ' × 7d growth)';
     if (t.age) s += ' × 10^(' + b[i++].toFixed(2) + ' × years)';
     if (t.sector) s += ' × sector';

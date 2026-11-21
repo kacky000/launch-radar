@@ -360,7 +360,8 @@
     var loo = leaveOneOut(comps, choice.terms), wf = walkForward(comps, choice.terms);
     comps.forEach(function (c, i) { c.model = c.cap / Math.pow(10, loo[i]); c.miss = Math.pow(10, Math.abs(loo[i])); });
     var band = [quant(loo, 0.25), quant(loo, 0.75)];
-    function inside(errors) { return errors.filter(function (e) { return e >= band[0] && e <= band[1]; }).length / errors.length; }
+    function inside(errors, b) { b = b || band; return errors.filter(function (e) { return e >= b[0] && e <= b[1]; }).length / errors.length; }
+    var wide = [quant(loo, 0.1), quant(loo, 0.9)], slopes = [];
 
     // Like with like: dated protocols that are neither an exchange nor a bridged or staked product.
     var peers = items.filter(function (o) { return o.listed && (RANKED[o.group] || o.group === 'kin' || o.group === 'comp' || o.group === 'token') && !SET_ASIDE[o.category]; });
@@ -386,6 +387,7 @@
     var seed = 20261114, seen = rows.map(function () { return []; });
     for (var k = 0; k < 200; k++) {
       var refit = fitValue(comps.map(function () { seed = (Math.imul(seed, 1103515245) + 12345) >>> 0; return comps[(seed >>> 8) % comps.length]; }), choice.terms);
+      slopes.push(refit.b[1]);
       var v = rows.map(function (r) { return valueAt(refit, r) + Math.log10(r.odds); });
       v.forEach(function (x, i) { seen[i].push(1 + v.filter(function (y) { return y > x; }).length); });
     }
@@ -394,7 +396,8 @@
     return {
       as_of: snap.as_of, source: snap.source, floor_usd: snap.floor_usd, total: P.length, watchlist: snap.watchlist.length,
       counts: counts, items: items, comps: comps, fit: fit, steps: choice.steps, band: band,
-      tests: { loo: missOf(loo), wf: missOf(wf), flatLoo: choice.steps[0].loo, flatWf: choice.steps[0].wf, holdLoo: inside(loo), holdWf: inside(wf), dated: wf.length },
+      tests: { loo: missOf(loo), wf: missOf(wf), flatLoo: choice.steps[0].loo, flatWf: choice.steps[0].wf, holdLoo: inside(loo), holdWf: inside(wf), wideWf: inside(wf, wide), dated: wf.length,
+        slopeSe: (quant(slopes, 0.84) - quant(slopes, 0.16)) / 2 },
       odds: { w: w, brier: full.model, base: full.base, peers: peers.length, tokens: peers.filter(function (o) { return o.token; }).length, terms: oddsTest },
       rows: rows, seal: { rows: rows.length, total: rows.reduce(function (s, r) { return s + r.implied_value_usd; }, 0), hash: sealOf(rows) }
     };
